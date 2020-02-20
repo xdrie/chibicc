@@ -286,3 +286,4 @@ void add_type(Node *node);
 //
 
 void codegen_x86(Program *prog);
+void codegen_rvm(Program *prog);

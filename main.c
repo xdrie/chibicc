@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
     fn->stack_size = align_to(offset, 8);
   }
 
-  // Traverse the AST to emit [x86] assembly.
-  codegen_x86(prog);
+  // Traverse the AST to emit [REGULAR_ad] assembly.
+  codegen_rvm(prog);
 
   return 0;
 }
