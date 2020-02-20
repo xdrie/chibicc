@@ -1,23 +1,23 @@
 #include "chibi.h"
 
-static char *argreg1[] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
-static char *argreg2[] = {"di", "si", "dx", "cx", "r8w", "r9w"};
-static char *argreg4[] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
-static char *argreg8[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+static char *argreg1_x86[] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
+static char *argreg2_x86[] = {"di", "si", "dx", "cx", "r8w", "r9w"};
+static char *argreg4_x86[] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
+static char *argreg8_x86[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
-static int labelseq = 1;
-static int brkseq;
-static int contseq;
-static char *funcname;
+static int labelseq_x86 = 1;
+static int brkseq_x86;
+static int contseq_x86;
+static char *funcname_x86;
 
-static void gen(Node *node);
+static void gen_x86(Node *node);
 
 // Pushes the given node's address to the stack.
-static void gen_addr(Node *node) {
+static void gen_x86_addr(Node *node) {
   switch (node->kind) {
   case ND_VAR: {
     if (node->init)
-      gen(node->init);
+      gen_x86(node->init);
 
     Var *var = node->var;
     if (var->is_local) {
@@ -29,10 +29,10 @@ static void gen_addr(Node *node) {
     return;
   }
   case ND_DEREF:
-    gen(node->lhs);
+    gen_x86(node->lhs);
     return;
   case ND_MEMBER:
-    gen_addr(node->lhs);
+    gen_x86_addr(node->lhs);
     printf("  pop rax\n");
     printf("  add rax, %d\n", node->member->offset);
     printf("  push rax\n");
@@ -42,13 +42,13 @@ static void gen_addr(Node *node) {
   error_tok(node->tok, "not an lvalue");
 }
 
-static void gen_lval(Node *node) {
+static void gen_x86_lval(Node *node) {
   if (node->ty->kind == TY_ARRAY)
     error_tok(node->tok, "not an lvalue");
-  gen_addr(node);
+  gen_x86_addr(node);
 }
 
-static void load(Type *ty) {
+static void load_x86(Type *ty) {
   printf("  pop rax\n");
 
   if (ty->size == 1) {
@@ -65,7 +65,7 @@ static void load(Type *ty) {
   printf("  push rax\n");
 }
 
-static void store(Type *ty) {
+static void store_x86(Type *ty) {
   printf("  pop rdi\n");
   printf("  pop rax\n");
 
@@ -89,7 +89,7 @@ static void store(Type *ty) {
   printf("  push rdi\n");
 }
 
-static void truncate(Type *ty) {
+static void truncate_x86(Type *ty) {
   printf("  pop rax\n");
 
   if (ty->kind == TY_BOOL) {
@@ -107,19 +107,19 @@ static void truncate(Type *ty) {
   printf("  push rax\n");
 }
 
-static void inc(Type *ty) {
+static void inc_x86(Type *ty) {
   printf("  pop rax\n");
   printf("  add rax, %d\n", ty->base ? ty->base->size : 1);
   printf("  push rax\n");
 }
 
-static void dec(Type *ty) {
+static void dec_x86(Type *ty) {
   printf("  pop rax\n");
   printf("  sub rax, %d\n", ty->base ? ty->base->size : 1);
   printf("  push rax\n");
 }
 
-static void gen_binary(Node *node) {
+static void gen_x86_binary(Node *node) {
   printf("  pop rdi\n");
   printf("  pop rax\n");
 
@@ -204,8 +204,8 @@ static void gen_binary(Node *node) {
   printf("  push rax\n");
 }
 
-// Generate code for a given node.
-static void gen(Node *node) {
+// gen_x86erate code for a given node.
+static void gen_x86(Node *node) {
   switch (node->kind) {
   case ND_NULL:
     return;
@@ -218,68 +218,68 @@ static void gen(Node *node) {
     }
     return;
   case ND_EXPR_STMT:
-    gen(node->lhs);
+    gen_x86(node->lhs);
     printf("  add rsp, 8\n");
     return;
   case ND_VAR:
     if (node->init)
-      gen(node->init);
-    gen_addr(node);
+      gen_x86(node->init);
+    gen_x86_addr(node);
     if (node->ty->kind != TY_ARRAY)
-      load(node->ty);
+      load_x86(node->ty);
     return;
   case ND_MEMBER:
-    gen_addr(node);
+    gen_x86_addr(node);
     if (node->ty->kind != TY_ARRAY)
-      load(node->ty);
+      load_x86(node->ty);
     return;
   case ND_ASSIGN:
-    gen_lval(node->lhs);
-    gen(node->rhs);
-    store(node->ty);
+    gen_x86_lval(node->lhs);
+    gen_x86(node->rhs);
+    store_x86(node->ty);
     return;
   case ND_TERNARY: {
-    int seq = labelseq++;
-    gen(node->cond);
+    int seq = labelseq_x86++;
+    gen_x86(node->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je  .L.else.%d\n", seq);
-    gen(node->then);
+    gen_x86(node->then);
     printf("  jmp .L.end.%d\n", seq);
     printf(".L.else.%d:\n", seq);
-    gen(node->els);
+    gen_x86(node->els);
     printf(".L.end.%d:\n", seq);
     return;
   }
   case ND_PRE_INC:
-    gen_lval(node->lhs);
+    gen_x86_lval(node->lhs);
     printf("  push [rsp]\n");
-    load(node->ty);
-    inc(node->ty);
-    store(node->ty);
+    load_x86(node->ty);
+    inc_x86(node->ty);
+    store_x86(node->ty);
     return;
   case ND_PRE_DEC:
-    gen_lval(node->lhs);
+    gen_x86_lval(node->lhs);
     printf("  push [rsp]\n");
-    load(node->ty);
-    dec(node->ty);
-    store(node->ty);
+    load_x86(node->ty);
+    dec_x86(node->ty);
+    store_x86(node->ty);
     return;
   case ND_POST_INC:
-    gen_lval(node->lhs);
+    gen_x86_lval(node->lhs);
     printf("  push [rsp]\n");
-    load(node->ty);
-    inc(node->ty);
-    store(node->ty);
-    dec(node->ty);
+    load_x86(node->ty);
+    inc_x86(node->ty);
+    store_x86(node->ty);
+    dec_x86(node->ty);
     return;
   case ND_POST_DEC:
-    gen_lval(node->lhs);
+    gen_x86_lval(node->lhs);
     printf("  push [rsp]\n");
-    load(node->ty);
-    dec(node->ty);
-    store(node->ty);
-    inc(node->ty);
+    load_x86(node->ty);
+    dec_x86(node->ty);
+    store_x86(node->ty);
+    inc_x86(node->ty);
     return;
   case ND_ADD_EQ:
   case ND_PTR_ADD_EQ:
@@ -292,27 +292,27 @@ static void gen(Node *node) {
   case ND_BITAND_EQ:
   case ND_BITOR_EQ:
   case ND_BITXOR_EQ:
-    gen_lval(node->lhs);
+    gen_x86_lval(node->lhs);
     printf("  push [rsp]\n");
-    load(node->lhs->ty);
-    gen(node->rhs);
-    gen_binary(node);
-    store(node->ty);
+    load_x86(node->lhs->ty);
+    gen_x86(node->rhs);
+    gen_x86_binary(node);
+    store_x86(node->ty);
     return;
   case ND_COMMA:
-    gen(node->lhs);
-    gen(node->rhs);
+    gen_x86(node->lhs);
+    gen_x86(node->rhs);
     return;
   case ND_ADDR:
-    gen_addr(node->lhs);
+    gen_x86_addr(node->lhs);
     return;
   case ND_DEREF:
-    gen(node->lhs);
+    gen_x86(node->lhs);
     if (node->ty->kind != TY_ARRAY)
-      load(node->ty);
+      load_x86(node->ty);
     return;
   case ND_NOT:
-    gen(node->lhs);
+    gen_x86(node->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  sete al\n");
@@ -320,18 +320,18 @@ static void gen(Node *node) {
     printf("  push rax\n");
     return;
   case ND_BITNOT:
-    gen(node->lhs);
+    gen_x86(node->lhs);
     printf("  pop rax\n");
     printf("  not rax\n");
     printf("  push rax\n");
     return;
   case ND_LOGAND: {
-    int seq = labelseq++;
-    gen(node->lhs);
+    int seq = labelseq_x86++;
+    gen_x86(node->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je  .L.false.%d\n", seq);
-    gen(node->rhs);
+    gen_x86(node->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je  .L.false.%d\n", seq);
@@ -343,12 +343,12 @@ static void gen(Node *node) {
     return;
   }
   case ND_LOGOR: {
-    int seq = labelseq++;
-    gen(node->lhs);
+    int seq = labelseq_x86++;
+    gen_x86(node->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne .L.true.%d\n", seq);
-    gen(node->rhs);
+    gen_x86(node->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne .L.true.%d\n", seq);
@@ -360,146 +360,146 @@ static void gen(Node *node) {
     return;
   }
   case ND_IF: {
-    int seq = labelseq++;
+    int seq = labelseq_x86++;
     if (node->els) {
-      gen(node->cond);
+      gen_x86(node->cond);
       printf("  pop rax\n");
       printf("  cmp rax, 0\n");
       printf("  je  .L.else.%d\n", seq);
-      gen(node->then);
+      gen_x86(node->then);
       printf("  jmp .L.end.%d\n", seq);
       printf(".L.else.%d:\n", seq);
-      gen(node->els);
+      gen_x86(node->els);
       printf(".L.end.%d:\n", seq);
     } else {
-      gen(node->cond);
+      gen_x86(node->cond);
       printf("  pop rax\n");
       printf("  cmp rax, 0\n");
       printf("  je  .L.end.%d\n", seq);
-      gen(node->then);
+      gen_x86(node->then);
       printf(".L.end.%d:\n", seq);
     }
     return;
   }
   case ND_WHILE: {
-    int seq = labelseq++;
-    int brk = brkseq;
-    int cont = contseq;
-    brkseq = contseq = seq;
+    int seq = labelseq_x86++;
+    int brk = brkseq_x86;
+    int cont = contseq_x86;
+    brkseq_x86 = contseq_x86 = seq;
 
     printf(".L.continue.%d:\n", seq);
-    gen(node->cond);
+    gen_x86(node->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je  .L.break.%d\n", seq);
-    gen(node->then);
+    gen_x86(node->then);
     printf("  jmp .L.continue.%d\n", seq);
     printf(".L.break.%d:\n", seq);
 
-    brkseq = brk;
-    contseq = cont;
+    brkseq_x86 = brk;
+    contseq_x86 = cont;
     return;
   }
   case ND_FOR: {
-    int seq = labelseq++;
-    int brk = brkseq;
-    int cont = contseq;
-    brkseq = contseq = seq;
+    int seq = labelseq_x86++;
+    int brk = brkseq_x86;
+    int cont = contseq_x86;
+    brkseq_x86 = contseq_x86 = seq;
 
     if (node->init)
-      gen(node->init);
+      gen_x86(node->init);
     printf(".L.begin.%d:\n", seq);
     if (node->cond) {
-      gen(node->cond);
+      gen_x86(node->cond);
       printf("  pop rax\n");
       printf("  cmp rax, 0\n");
       printf("  je  .L.break.%d\n", seq);
     }
-    gen(node->then);
+    gen_x86(node->then);
     printf(".L.continue.%d:\n", seq);
     if (node->inc)
-      gen(node->inc);
+      gen_x86(node->inc);
     printf("  jmp .L.begin.%d\n", seq);
     printf(".L.break.%d:\n", seq);
 
-    brkseq = brk;
-    contseq = cont;
+    brkseq_x86 = brk;
+    contseq_x86 = cont;
     return;
   }
   case ND_DO: {
-    int seq = labelseq++;
-    int brk = brkseq;
-    int cont = contseq;
-    brkseq = contseq = seq;
+    int seq = labelseq_x86++;
+    int brk = brkseq_x86;
+    int cont = contseq_x86;
+    brkseq_x86 = contseq_x86 = seq;
 
     printf(".L.begin.%d:\n", seq);
-    gen(node->then);
+    gen_x86(node->then);
     printf(".L.continue.%d:\n", seq);
-    gen(node->cond);
+    gen_x86(node->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne .L.begin.%d\n", seq);
     printf(".L.break.%d:\n", seq);
 
-    brkseq = brk;
-    contseq = cont;
+    brkseq_x86 = brk;
+    contseq_x86 = cont;
     return;
   }
   case ND_SWITCH: {
-    int seq = labelseq++;
-    int brk = brkseq;
-    brkseq = seq;
+    int seq = labelseq_x86++;
+    int brk = brkseq_x86;
+    brkseq_x86 = seq;
     node->case_label = seq;
 
-    gen(node->cond);
+    gen_x86(node->cond);
     printf("  pop rax\n");
 
     for (Node *n = node->case_next; n; n = n->case_next) {
-      n->case_label = labelseq++;
+      n->case_label = labelseq_x86++;
       n->case_end_label = seq;
       printf("  cmp rax, %ld\n", n->val);
       printf("  je .L.case.%d\n", n->case_label);
     }
 
     if (node->default_case) {
-      int i = labelseq++;
+      int i = labelseq_x86++;
       node->default_case->case_end_label = seq;
       node->default_case->case_label = i;
       printf("  jmp .L.case.%d\n", i);
     }
 
     printf("  jmp .L.break.%d\n", seq);
-    gen(node->then);
+    gen_x86(node->then);
     printf(".L.break.%d:\n", seq);
 
-    brkseq = brk;
+    brkseq_x86 = brk;
     return;
   }
   case ND_CASE:
     printf(".L.case.%d:\n", node->case_label);
-    gen(node->lhs);
+    gen_x86(node->lhs);
     return;
   case ND_BLOCK:
   case ND_STMT_EXPR:
     for (Node *n = node->body; n; n = n->next)
-      gen(n);
+      gen_x86(n);
     return;
   case ND_BREAK:
-    if (brkseq == 0)
+    if (brkseq_x86 == 0)
       error_tok(node->tok, "stray break");
-    printf("  jmp .L.break.%d\n", brkseq);
+    printf("  jmp .L.break.%d\n", brkseq_x86);
     return;
   case ND_CONTINUE:
-    if (contseq == 0)
+    if (contseq_x86 == 0)
       error_tok(node->tok, "stray continue");
-    printf("  jmp .L.continue.%d\n", contseq);
+    printf("  jmp .L.continue.%d\n", contseq_x86);
     return;
   case ND_GOTO:
-    printf("  jmp .L.label.%s.%s\n", funcname, node->label_name);
+    printf("  jmp .L.label.%s.%s\n", funcname_x86, node->label_name);
     return;
   case ND_LABEL:
-    printf(".L.label.%s.%s:\n", funcname, node->label_name);
-    gen(node->lhs);
+    printf(".L.label.%s.%s:\n", funcname_x86, node->label_name);
+    gen_x86(node->lhs);
     return;
   case ND_FUNCALL: {
     if (!strcmp(node->funcname, "__builtin_va_start")) {
@@ -514,17 +514,17 @@ static void gen(Node *node) {
 
     int nargs = 0;
     for (Node *arg = node->args; arg; arg = arg->next) {
-      gen(arg);
+      gen_x86(arg);
       nargs++;
     }
 
     for (int i = nargs - 1; i >= 0; i--)
-      printf("  pop %s\n", argreg8[i]);
+      printf("  pop %s\n", argreg8_x86[i]);
 
     // We need to align RSP to a 16 byte boundary before
     // calling a function because it is an ABI requirement.
     // RAX is set to 0 for variadic function.
-    int seq = labelseq++;
+    int seq = labelseq_x86++;
     printf("  mov rax, rsp\n");
     printf("  and rax, 15\n");
     printf("  jnz .L.call.%d\n", seq);
@@ -544,23 +544,23 @@ static void gen(Node *node) {
   }
   case ND_RETURN:
     if (node->lhs) {
-      gen(node->lhs);
+      gen_x86(node->lhs);
       printf("  pop rax\n");
     }
-    printf("  jmp .L.return.%s\n", funcname);
+    printf("  jmp .L.return.%s\n", funcname_x86);
     return;
   case ND_CAST:
-    gen(node->lhs);
-    truncate(node->ty);
+    gen_x86(node->lhs);
+    truncate_x86(node->ty);
     return;
   }
 
-  gen(node->lhs);
-  gen(node->rhs);
-  gen_binary(node);
+  gen_x86(node->lhs);
+  gen_x86(node->rhs);
+  gen_x86_binary(node);
 }
 
-static void emit_data(Program *prog) {
+static void emit_data_x86(Program *prog) {
   for (VarList *vl = prog->globals; vl; vl = vl->next)
     if (!vl->var->is_static)
       printf(".global %s\n", vl->var->name);
@@ -598,28 +598,28 @@ static void emit_data(Program *prog) {
   }
 }
 
-static void load_arg(Var *var, int idx) {
+static void load_arg_x86(Var *var, int idx) {
   int sz = var->ty->size;
   if (sz == 1) {
-    printf("  mov [rbp-%d], %s\n", var->offset, argreg1[idx]);
+    printf("  mov [rbp-%d], %s\n", var->offset, argreg1_x86[idx]);
   } else if (sz == 2) {
-    printf("  mov [rbp-%d], %s\n", var->offset, argreg2[idx]);
+    printf("  mov [rbp-%d], %s\n", var->offset, argreg2_x86[idx]);
   } else if (sz == 4) {
-    printf("  mov [rbp-%d], %s\n", var->offset, argreg4[idx]);
+    printf("  mov [rbp-%d], %s\n", var->offset, argreg4_x86[idx]);
   } else {
     assert(sz == 8);
-    printf("  mov [rbp-%d], %s\n", var->offset, argreg8[idx]);
+    printf("  mov [rbp-%d], %s\n", var->offset, argreg8_x86[idx]);
   }
 }
 
-static void emit_text(Program *prog) {
+static void emit_text_x86(Program *prog) {
   printf(".text\n");
 
   for (Function *fn = prog->fns; fn; fn = fn->next) {
     if (!fn->is_static)
       printf(".global %s\n", fn->name);
     printf("%s:\n", fn->name);
-    funcname = fn->name;
+    funcname_x86 = fn->name;
 
     // Prologue
     printf("  push rbp\n");
@@ -644,22 +644,22 @@ static void emit_text(Program *prog) {
     // Push arguments to the stack
     int i = 0;
     for (VarList *vl = fn->params; vl; vl = vl->next)
-      load_arg(vl->var, i++);
+      load_arg_x86(vl->var, i++);
 
     // Emit code
     for (Node *node = fn->node; node; node = node->next)
-      gen(node);
+      gen_x86(node);
 
     // Epilogue
-    printf(".L.return.%s:\n", funcname);
+    printf(".L.return.%s:\n", funcname_x86);
     printf("  mov rsp, rbp\n");
     printf("  pop rbp\n");
     printf("  ret\n");
   }
 }
 
-void codegen(Program *prog) {
+void codegen_x86(Program *prog) {
   printf(".intel_syntax noprefix\n");
-  emit_data(prog);
-  emit_text(prog);
+  emit_data_x86(prog);
+  emit_text_x86(prog);
 }

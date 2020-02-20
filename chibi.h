@@ -282,7 +282,7 @@ Type *struct_type(void);
 void add_type(Node *node);
 
 //
-// codegen.c
+// code generators
 //
 
-void codegen(Program *prog);
+void codegen_x86(Program *prog);
